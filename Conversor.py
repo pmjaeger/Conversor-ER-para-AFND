@@ -41,7 +41,7 @@ class ConversorThompson:
         mapa_nomes = {}
         ordem = 0
 
-        # Fazemos uma Busca em Largura (BFS) para nomear na ordem correta
+        # Busca em Largura (BFS) para nomear na ordem correta
         fila = [inicio]
         mapa_nomes[inicio] = f"q{ordem}"
         ordem += 1
@@ -60,7 +60,7 @@ class ConversorThompson:
                             ordem += 1
                             fila.append(d)
 
-        # Se sobrou algum estado perdido (garantia de segurança)
+        # Se sobrou algum estado perdido 
         for e in self.estados:
             if e not in mapa_nomes:
                 mapa_nomes[e] = f"q{ordem}"
@@ -159,7 +159,7 @@ class ConversorThompson:
                 self.add_transicao(i_novo, "", i1)     # Pula para dentro (obrigatório)
                 self.add_transicao(f1, "", i1)         # Repete (loop)
                 self.add_transicao(f1, "", f_novo)     # Sai
-                # Note que NÃO tem a transição direta de i_novo para f_novo
+                # Não tem a transição direta de i_novo para f_novo
                 
             i1, f1 = i_novo, f_novo
             
@@ -171,7 +171,7 @@ class ConversorThompson:
             
         c = self.regex[self.pos]
         
-        # Se for parênteses, resolve a expressão de dentro primeiro
+        # Se for parênteses resolve a expressão de dentro primeiro
         if c == '(':
             self.pos += 1
             inicio, fim = self.expressao()
@@ -182,11 +182,11 @@ class ConversorThompson:
             self.pos += 1
             return inicio, fim
             
-        # Tratamento de erro para operadores no lugar errado (Adicionado o '+')
+        # Tratamento de erro para operadores no lugar errado
         if c in ['|', ')', '*', '?', '+']:
             raise ValueError(f"Operador '{c}' usado em local inválido.")
             
-        # Símbolo normal ou Epsilon (ε)
+        # Símbolo normal ou Epsilon 
         self.pos += 1
         inicio = self.novo_estado()
         fim = self.novo_estado()
