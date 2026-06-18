@@ -19,4 +19,5 @@ Biblioteca utilizada para gráficos: https://caleb531.github.io/automata/
 pip install automata-lib
 pip install coloraide
 pip install pygraphviz
+pip install Pillow
 ```
