@@ -128,31 +128,48 @@ class ConversorThompson:
         return i1, f1
 
     def fator(self, estado_inicial=None):
-        # Repassa o estado_inicial recebido para o atomo
-        i1, f1 = self.atomo(estado_inicial=estado_inicial)
+        # Verifica se o próximo caractere é um operador de sufixo (*, ?, +)
+        proximo_eh_operador = (self.pos + 1 < len(self.regex) and self.regex[self.pos + 1] in ['*', '?', '+']) or \
+                              (self.pos < len(self.regex) and self.regex[self.pos] in [
+                               '*', '?', '+'])  # No caso de parênteses
+
+        # Se próximo for operador então concatenção não pode fundir estado inicial diretamente
+        # Força a criação de um átomo isolado para o fecho
+        if proximo_eh_operador:
+            i1, f1 = self.atomo(estado_inicial=None)
+        else:
+            i1, f1 = self.atomo(estado_inicial=estado_inicial)
 
         while self.pos < len(self.regex) and self.regex[self.pos] in ['*', '?', '+']:
             operador = self.regex[self.pos]
             self.pos += 1
 
-            i_novo = self.novo_estado()
+            # Se recebe um estado_inicial da concatenação (termo), o início do fecho reutiliza ele
+            i_novo = estado_inicial if estado_inicial is not None else self.novo_estado()
+            # Depois de usar o estado_inicial, limpa para loops no mesmo fator
+            estado_inicial = None
+
             f_novo = self.novo_estado()
 
-            if operador == '*':
+            if operador == '*':  # Fecho de Kleene (0 ou mais vezes)
+                # Vai para base do fecho
                 self.add_transicao(i_novo, "", i1)
+                # Pula tudo (zero vezes)
                 self.add_transicao(i_novo, "", f_novo)
-                self.add_transicao(f1, "", i1)
-                self.add_transicao(f1, "", f_novo)
+                self.add_transicao(f1, "", i1)          # Loop
+                self.add_transicao(f1, "", f_novo)      # Sai
 
-            elif operador == '?':
+            elif operador == '?':  # Fecho opcional (0 ou 1 vez)
+                # Vai para base do fecho (1 vez)
                 self.add_transicao(i_novo, "", i1)
-                self.add_transicao(i_novo, "", f_novo)
-                self.add_transicao(f1, "", f_novo)
+                self.add_transicao(i_novo, "", f_novo)  # Pula tudo (0 vezes)
+                self.add_transicao(f1, "", f_novo)      # Sai
 
-            elif operador == '+':
+            elif operador == '+':  # Fecho positivo (1 ou mais vezes)
+                # Vai para base do fecho (obrigatório)
                 self.add_transicao(i_novo, "", i1)
-                self.add_transicao(f1, "", i1)
-                self.add_transicao(f1, "", f_novo)
+                self.add_transicao(f1, "", i1)          # Loop
+                self.add_transicao(f1, "", f_novo)      # Sai
 
             i1, f1 = i_novo, f_novo
 
