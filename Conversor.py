@@ -1,276 +1,186 @@
-from __future__ import annotations
-
-from dataclasses import dataclass
 from automata.fa.nfa import NFA
 
-
-# ============================================================
-# Nós da árvore sintática da expressão regular
-# ============================================================
-
-@dataclass(frozen=True)
-class Symbol:
-    value: str
-
-
-@dataclass(frozen=True)
-class Epsilon:
-    pass
-
-
-@dataclass(frozen=True)
-class UnionNode:
-    left: object
-    right: object
-
-
-@dataclass(frozen=True)
-class ConcatNode:
-    left: object
-    right: object
-
-
-@dataclass(frozen=True)
-class StarNode:
-    node: object
-
-
-# ============================================================
-# Fragmento de Thompson
-# ============================================================
-
-class Fragmento:
-    def __init__(self, inicio, fim):
-        self.inicio = inicio
-        self.fim = fim
-
-
-# ============================================================
-# Parser recursivo da expressão regular
-# Grammar:
-#   expression := term ('|' term)*
-#   term       := factor+
-#   factor     := atom ('*')*
-#   atom       := SYMBOL | 'ε' | '(' expression ')'
-# ============================================================
-
-class RegexParser:
-    def __init__(self, texto: str):
-        self.texto = texto.replace(" ", "")
-        self.i = 0
-
-    def atual(self):
-        if self.i >= len(self.texto):
-            return None
-        return self.texto[self.i]
-
-    def consumir(self, esperado=None):
-        c = self.atual()
-        if c is None:
-            raise ValueError("Fim inesperado da expressão regular.")
-        if esperado is not None and c != esperado:
-            raise ValueError(f"Esperado '{esperado}', mas encontrado '{c}'.")
-        self.i += 1
-        return c
-
-    def parse(self):
-        if not self.texto:
-            raise ValueError("Expressão regular vazia.")
-
-        nodo = self.parse_expression()
-
-        if self.atual() is not None:
-            raise ValueError(
-                f"Caractere inesperado na posição {self.i}: '{self.atual()}'."
-            )
-
-        return nodo
-
-    def parse_expression(self):
-        nodo = self.parse_term()
-
-        while self.atual() == "|":
-            self.consumir("|")
-            direito = self.parse_term()
-            nodo = UnionNode(nodo, direito)
-
-        return nodo
-
-    def parse_term(self):
-        fatores = []
-
-        while True:
-            c = self.atual()
-            if c is None or c in ")|":
-                break
-            fatores.append(self.parse_factor())
-
-        if not fatores:
-            raise ValueError(
-                f"Termo vazio na posição {self.i}. "
-                "Verifique operadores '|' e parênteses."
-            )
-
-        nodo = fatores[0]
-        for fator in fatores[1:]:
-            nodo = ConcatNode(nodo, fator)
-
-        return nodo
-
-    def parse_factor(self):
-        nodo = self.parse_atom()
-
-        while self.atual() == "*":
-            self.consumir("*")
-            nodo = StarNode(nodo)
-
-        return nodo
-
-    def parse_atom(self):
-        c = self.atual()
-
-        if c is None:
-            raise ValueError("Fim inesperado ao ler um átomo.")
-
-        if c == "(":
-            self.consumir("(")
-            nodo = self.parse_expression()
-
-            if self.atual() != ")":
-                raise ValueError(
-                    f"Parêntese ')' esperado na posição {self.i}."
-                )
-
-            self.consumir(")")
-            return nodo
-
-        if c == "ε":
-            self.consumir("ε")
-            return Epsilon()
-
-        if c in {"|", ")", "*"}:
-            raise ValueError(
-                f"Símbolo inválido na posição {self.i}: '{c}'."
-            )
-
-        # Símbolo do alfabeto: qualquer caractere que não seja operador
-        self.consumir()
-        return Symbol(c)
-
-
-# ============================================================
-# Conversor Thompson recursivo
-# ============================================================
 
 class ConversorThompson:
     def __init__(self, regex: str):
         self.regex = regex.replace(" ", "")
-        self.contador = 0
+        self.pos = 0
+        self.cont = 0
+
         self.estados = set()
+        self.alfabeto = set()
         self.transicoes = {}
 
-        operadores = {"(", ")", "|", "*"}
-        self.alfabeto = {
-            c for c in self.regex
-            if c not in operadores and c != "ε"
-        }
-
-        self.parser = RegexParser(self.regex)
-
     def novo_estado(self):
-        estado = f"q{self.contador}"
-        self.contador += 1
+        estado = f"q{self.cont}"
+        self.cont += 1
         self.estados.add(estado)
         return estado
 
-    def adicionar_transicao(self, origem, simbolo, destino):
-        self.transicoes.setdefault(origem, {})
-        self.transicoes[origem].setdefault(simbolo, set())
+    def add_transicao(self, origem, simbolo, destino):
+        if origem not in self.transicoes:
+            self.transicoes[origem] = {}
+        if simbolo not in self.transicoes[origem]:
+            self.transicoes[origem][simbolo] = set()
+
         self.transicoes[origem][simbolo].add(destino)
 
-    # --------------------------------------------------------
-    # Construções de Thompson
-    # --------------------------------------------------------
-
-    def simbolo(self, c):
-        inicio = self.novo_estado()
-        fim = self.novo_estado()
-        self.adicionar_transicao(inicio, c, fim)
-        return Fragmento(inicio, fim)
-
-    def epsilon(self):
-        inicio = self.novo_estado()
-        fim = self.novo_estado()
-        self.adicionar_transicao(inicio, "", fim)
-        return Fragmento(inicio, fim)
-
-    def concatenar(self, f1, f2):
-        self.adicionar_transicao(f1.fim, "", f2.inicio)
-        return Fragmento(f1.inicio, f2.fim)
-
-    def uniao(self, f1, f2):
-        inicio = self.novo_estado()
-        fim = self.novo_estado()
-
-        self.adicionar_transicao(inicio, "", f1.inicio)
-        self.adicionar_transicao(inicio, "", f2.inicio)
-
-        self.adicionar_transicao(f1.fim, "", fim)
-        self.adicionar_transicao(f2.fim, "", fim)
-
-        return Fragmento(inicio, fim)
-
-    def estrela(self, f):
-        inicio = self.novo_estado()
-        fim = self.novo_estado()
-
-        self.adicionar_transicao(inicio, "", f.inicio)
-        self.adicionar_transicao(inicio, "", fim)
-
-        self.adicionar_transicao(f.fim, "", f.inicio)
-        self.adicionar_transicao(f.fim, "", fim)
-
-        return Fragmento(inicio, fim)
-
-    # --------------------------------------------------------
-    # Thompson sobre a árvore sintática
-    # --------------------------------------------------------
-
-    def construir(self, nodo):
-        if isinstance(nodo, Symbol):
-            return self.simbolo(nodo.value)
-
-        if isinstance(nodo, Epsilon):
-            return self.epsilon()
-
-        if isinstance(nodo, UnionNode):
-            esquerdo = self.construir(nodo.left)
-            direito = self.construir(nodo.right)
-            return self.uniao(esquerdo, direito)
-
-        if isinstance(nodo, ConcatNode):
-            esquerdo = self.construir(nodo.left)
-            direito = self.construir(nodo.right)
-            return self.concatenar(esquerdo, direito)
-
-        if isinstance(nodo, StarNode):
-            interno = self.construir(nodo.node)
-            return self.estrela(interno)
-
-        raise ValueError(f"Nó inválido na árvore sintática: {type(nodo)}")
-
-    # --------------------------------------------------------
-    # Conversão final
-    # --------------------------------------------------------
-
     def converter(self):
-        arvore = self.parser.parse()
-        resultado = self.construir(arvore)
+        if not self.regex:
+            raise ValueError("A expressão regular está vazia.")
+
+        inicio, fim = self.expressao()
+
+        if self.pos < len(self.regex):
+            raise ValueError(
+                f"Caractere inesperado na posição {self.pos}: '{self.regex[self.pos]}'. Verifique os parênteses.")
+
+        # =========================================================
+        # PÓS-PROCESSAMENTO: Renomear estados para começar em q0
+        # =========================================================
+        mapa_nomes = {}
+        ordem = 0
+
+        # Fazemos uma Busca em Largura (BFS) para nomear na ordem correta
+        fila = [inicio]
+        mapa_nomes[inicio] = f"q{ordem}"
+        ordem += 1
+
+        visitados = {inicio}
+
+        while fila:
+            atual = fila.pop(0)
+            if atual in self.transicoes:
+                # Ordena as transições apenas para garantir consistência
+                for simb, destinos in self.transicoes[atual].items():
+                    for d in sorted(list(destinos)):
+                        if d not in visitados:
+                            visitados.add(d)
+                            mapa_nomes[d] = f"q{ordem}"
+                            ordem += 1
+                            fila.append(d)
+
+        # Se sobrou algum estado perdido (garantia de segurança)
+        for e in self.estados:
+            if e not in mapa_nomes:
+                mapa_nomes[e] = f"q{ordem}"
+                ordem += 1
+
+        # Atualiza as transições com os novos nomes padronizados
+        novas_transicoes = {}
+        for origem, trans in self.transicoes.items():
+            n_origem = mapa_nomes[origem]
+            novas_transicoes[n_origem] = {}
+            for simb, dests in trans.items():
+                novas_transicoes[n_origem][simb] = {
+                    mapa_nomes[d] for d in dests}
+
+        self.estados = set(mapa_nomes.values())
+        self.transicoes = novas_transicoes
+        inicio = mapa_nomes[inicio]
+        fim = mapa_nomes[fim]
+        # =========================================================
 
         return NFA(
             states=self.estados,
             input_symbols=self.alfabeto,
             transitions=self.transicoes,
-            initial_state=resultado.inicio,
-            final_states={resultado.fim},
+            initial_state=inicio,
+            final_states={fim}
         )
+
+    # ==========================================
+    # Funções Recursivas (Parser + Thompson)
+    # ==========================================
+
+    def expressao(self):
+        # Trata a União (|)
+        i1, f1 = self.termo()
+
+        while self.pos < len(self.regex) and self.regex[self.pos] == '|':
+            self.pos += 1
+            i2, f2 = self.termo()
+
+            # Algoritmo de Thompson para união
+            i_novo = self.novo_estado()
+            f_novo = self.novo_estado()
+
+            self.add_transicao(i_novo, "", i1)
+            self.add_transicao(i_novo, "", i2)
+            self.add_transicao(f1, "", f_novo)
+            self.add_transicao(f2, "", f_novo)
+
+            i1, f1 = i_novo, f_novo
+
+        return i1, f1
+
+    def termo(self):
+        # Trata a Concatenação
+        i1, f1 = self.fator()
+
+        # Se o próximo caractere não for união nem fechamento de parêntese, é concatenação
+        while self.pos < len(self.regex) and self.regex[self.pos] not in ['|', ')']:
+            i2, f2 = self.fator()
+
+            # Algoritmo de Thompson para concatenação
+            self.add_transicao(f1, "", i2)
+
+            # O início é o do primeiro, o fim é o do segundo
+            f1 = f2
+
+        return i1, f1
+
+    def fator(self):
+        # Trata o Fecho de Kleene (*)
+        i1, f1 = self.atomo()
+
+        while self.pos < len(self.regex) and self.regex[self.pos] == '*':
+            self.pos += 1
+
+            # Algoritmo de Thompson para o fecho estrela
+            i_novo = self.novo_estado()
+            f_novo = self.novo_estado()
+
+            self.add_transicao(i_novo, "", i1)     # Pula para dentro
+            self.add_transicao(i_novo, "", f_novo)  # Pula tudo (zero vezes)
+            self.add_transicao(f1, "", i1)         # Repete
+            self.add_transicao(f1, "", f_novo)     # Sai
+
+            i1, f1 = i_novo, f_novo
+
+        return i1, f1
+
+    def atomo(self):
+        if self.pos >= len(self.regex):
+            raise ValueError(
+                "Expressão incompleta. Faltam operandos ou há parênteses vazios.")
+
+        c = self.regex[self.pos]
+
+        # Se for parênteses, resolve a expressão de dentro primeiro
+        if c == '(':
+            self.pos += 1
+            inicio, fim = self.expressao()
+
+            if self.pos >= len(self.regex) or self.regex[self.pos] != ')':
+                raise ValueError("Faltou fechar um parêntese ')'.")
+
+            self.pos += 1
+            return inicio, fim
+
+        # Tratamento de erro para operadores no lugar errado
+        if c in ['|', ')', '*']:
+            raise ValueError(f"Operador '{c}' usado em local inválido.")
+
+        # Símbolo normal ou Epsilon (ε)
+        self.pos += 1
+        inicio = self.novo_estado()
+        fim = self.novo_estado()
+
+        if c == 'ε':
+            self.add_transicao(inicio, "", fim)
+        else:
+            self.alfabeto.add(c)
+            self.add_transicao(inicio, c, fim)
+
+        return inicio, fim
