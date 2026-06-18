@@ -131,56 +131,70 @@ class ConversorThompson:
         return i1, f1
 
     def fator(self):
-        # Trata o Fecho de Kleene (*)
+        # Trata os operadores de sufixo: *, ? e +
         i1, f1 = self.atomo()
-
-        while self.pos < len(self.regex) and self.regex[self.pos] == '*':
+        
+        while self.pos < len(self.regex) and self.regex[self.pos] in ['*', '?', '+']:
+            operador = self.regex[self.pos]
             self.pos += 1
-
-            # Algoritmo de Thompson para o fecho estrela
+            
             i_novo = self.novo_estado()
             f_novo = self.novo_estado()
-
-            self.add_transicao(i_novo, "", i1)     # Pula para dentro
-            self.add_transicao(i_novo, "", f_novo)  # Pula tudo (zero vezes)
-            self.add_transicao(f1, "", i1)         # Repete
-            self.add_transicao(f1, "", f_novo)     # Sai
-
+            
+            if operador == '*':
+                # Thompson para o fecho estrela (0 ou mais vezes)
+                self.add_transicao(i_novo, "", i1)     # Pula para dentro
+                self.add_transicao(i_novo, "", f_novo) # Pula tudo (zero vezes)
+                self.add_transicao(f1, "", i1)         # Repete (loop)
+                self.add_transicao(f1, "", f_novo)     # Sai
+                
+            elif operador == '?':
+                # Thompson para o opcional (0 ou 1 vez)
+                self.add_transicao(i_novo, "", i1)     # Pula para dentro (1 vez)
+                self.add_transicao(i_novo, "", f_novo) # Pula tudo (0 vezes)
+                self.add_transicao(f1, "", f_novo)     # Sai
+                
+            elif operador == '+':
+                # Thompson para o fecho positivo (1 ou mais vezes)
+                self.add_transicao(i_novo, "", i1)     # Pula para dentro (obrigatório)
+                self.add_transicao(f1, "", i1)         # Repete (loop)
+                self.add_transicao(f1, "", f_novo)     # Sai
+                # Note que NÃO tem a transição direta de i_novo para f_novo
+                
             i1, f1 = i_novo, f_novo
-
+            
         return i1, f1
 
     def atomo(self):
         if self.pos >= len(self.regex):
-            raise ValueError(
-                "Expressão incompleta. Faltam operandos ou há parênteses vazios.")
-
+            raise ValueError("Expressão incompleta. Faltam operandos ou há parênteses vazios.")
+            
         c = self.regex[self.pos]
-
+        
         # Se for parênteses, resolve a expressão de dentro primeiro
         if c == '(':
             self.pos += 1
             inicio, fim = self.expressao()
-
+            
             if self.pos >= len(self.regex) or self.regex[self.pos] != ')':
                 raise ValueError("Faltou fechar um parêntese ')'.")
-
+                
             self.pos += 1
             return inicio, fim
-
-        # Tratamento de erro para operadores no lugar errado
-        if c in ['|', ')', '*']:
+            
+        # Tratamento de erro para operadores no lugar errado (Adicionado o '+')
+        if c in ['|', ')', '*', '?', '+']:
             raise ValueError(f"Operador '{c}' usado em local inválido.")
-
+            
         # Símbolo normal ou Epsilon (ε)
         self.pos += 1
         inicio = self.novo_estado()
         fim = self.novo_estado()
-
+        
         if c == 'ε':
             self.add_transicao(inicio, "", fim)
         else:
             self.alfabeto.add(c)
             self.add_transicao(inicio, c, fim)
-
+            
         return inicio, fim

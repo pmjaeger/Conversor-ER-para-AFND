@@ -8,7 +8,7 @@ class ConverterGUI:
 
     def __init__(self, master):
         self.master = master
-        master.title("🤖 Conversor ER → AFND (Thompson)")
+        master.title("Conversor ER → AFND (Thompson)")
         master.geometry("1000x750")
         master.resizable(False, False)
 
@@ -27,7 +27,7 @@ class ConverterGUI:
         # ========== TÍTULO ==========
         titulo = Label(
             master,
-            text="✨ Conversor de Expressão Regular para AFND",
+            text="Conversor de Expressão Regular para AFND",
             font=("Arial", 14, "bold"),
             bg=self.cor_fundo,
             fg=self.cor_primaria
@@ -67,7 +67,20 @@ class ConverterGUI:
             fg="#7f8c8d"
         ).pack(anchor="w")
 
-        exemplos_text = "a  |  (a|b)*  |  a*b*  |  (a|b|c)*abb  |  a(a|b)*b"
+        Label(
+            exemplo_frame,
+            text="ℹ️ Operadores: | (união), * (estrela), + (mais de 1), ? (opcional), ( ) (agrupamento), ε (epsilon)",
+            font=("Arial", 9),
+            bg="#ecf0f1",
+            fg="#555",
+            justify="left",
+            padx=10,
+            pady=5,
+            relief="solid",
+            border=1
+        ).pack(anchor="w", fill="x", pady=(0, 5))
+
+        exemplos_text = "a  |  (a|b)* |  a+b+  |  (a|b)?c+  |  a(a|b)*b"
         Label(
             exemplo_frame,
             text=exemplos_text,
@@ -184,7 +197,7 @@ class ConverterGUI:
 
         Label(
             instr_frame,
-            text="ℹ️ Operadores: | (união), * (estrela), ( ) (agrupamento), ε (epsilon)",
+            text="ℹ️ Operadores: | (união), * (estrela), + (mais de 1), ? (opcional), ( ) (agrupamento), ε (epsilon)",
             font=("Arial", 8),
             bg="#ecf0f1",
             fg="#555",
