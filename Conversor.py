@@ -11,6 +11,9 @@ class ConversorThompson:
         self.alfabeto = set()
         self.transicoes = {}
 
+        # Guardamos o último estado criado para poder fundir na concatenação
+        self.ultimo_estado_criado = None
+
     def novo_estado(self):
         estado = f"q{self.cont}"
         self.cont += 1
@@ -60,7 +63,7 @@ class ConversorThompson:
                             ordem += 1
                             fila.append(d)
 
-        # Se sobrou algum estado perdido 
+        # Se sobrou algum estado perdido
         for e in self.estados:
             if e not in mapa_nomes:
                 mapa_nomes[e] = f"q{ordem}"
@@ -94,14 +97,12 @@ class ConversorThompson:
     # ==========================================
 
     def expressao(self):
-        # Trata a União (|)
         i1, f1 = self.termo()
 
         while self.pos < len(self.regex) and self.regex[self.pos] == '|':
             self.pos += 1
             i2, f2 = self.termo()
 
-            # Algoritmo de Thompson para união
             i_novo = self.novo_estado()
             f_novo = self.novo_estado()
 
@@ -115,86 +116,88 @@ class ConversorThompson:
         return i1, f1
 
     def termo(self):
-        # Trata a Concatenação
-        i1, f1 = self.fator()
+        # Trata a Concatenação como 3 estados
+        # Passa None no primeiro fator porque ele criará seu próprio estado inicial
+        i1, f1 = self.fator(estado_inicial=None)
 
-        # Se o próximo caractere não for união nem fechamento de parêntese, é concatenação
         while self.pos < len(self.regex) and self.regex[self.pos] not in ['|', ')']:
-            i2, f2 = self.fator()
+            i2, f2 = self.fator(estado_inicial=f1)
 
-            # Algoritmo de Thompson para concatenação
-            self.add_transicao(f1, "", i2)
-
-            # O início é o do primeiro, o fim é o do segundo
-            f1 = f2
+            f1 = f2  # O fim do bloco todo passa a ser o fim do segundo fator
 
         return i1, f1
 
-    def fator(self):
-        # Trata os operadores de sufixo: *, ? e +
-        i1, f1 = self.atomo()
-        
+    def fator(self, estado_inicial=None):
+        # Repassa o estado_inicial recebido para o atomo
+        i1, f1 = self.atomo(estado_inicial=estado_inicial)
+
         while self.pos < len(self.regex) and self.regex[self.pos] in ['*', '?', '+']:
             operador = self.regex[self.pos]
             self.pos += 1
-            
+
             i_novo = self.novo_estado()
             f_novo = self.novo_estado()
-            
+
             if operador == '*':
-                # Thompson para o fecho estrela (0 ou mais vezes)
-                self.add_transicao(i_novo, "", i1)     # Pula para dentro
-                self.add_transicao(i_novo, "", f_novo) # Pula tudo (zero vezes)
-                self.add_transicao(f1, "", i1)         # Repete (loop)
-                self.add_transicao(f1, "", f_novo)     # Sai
-                
+                self.add_transicao(i_novo, "", i1)
+                self.add_transicao(i_novo, "", f_novo)
+                self.add_transicao(f1, "", i1)
+                self.add_transicao(f1, "", f_novo)
+
             elif operador == '?':
-                # Thompson para o opcional (0 ou 1 vez)
-                self.add_transicao(i_novo, "", i1)     # Pula para dentro (1 vez)
-                self.add_transicao(i_novo, "", f_novo) # Pula tudo (0 vezes)
-                self.add_transicao(f1, "", f_novo)     # Sai
-                
+                self.add_transicao(i_novo, "", i1)
+                self.add_transicao(i_novo, "", f_novo)
+                self.add_transicao(f1, "", f_novo)
+
             elif operador == '+':
-                # Thompson para o fecho positivo (1 ou mais vezes)
-                self.add_transicao(i_novo, "", i1)     # Pula para dentro (obrigatório)
-                self.add_transicao(f1, "", i1)         # Repete (loop)
-                self.add_transicao(f1, "", f_novo)     # Sai
-                # Não tem a transição direta de i_novo para f_novo
-                
+                self.add_transicao(i_novo, "", i1)
+                self.add_transicao(f1, "", i1)
+                self.add_transicao(f1, "", f_novo)
+
             i1, f1 = i_novo, f_novo
-            
+
         return i1, f1
 
-    def atomo(self):
+    def atomo(self, estado_inicial=None):
         if self.pos >= len(self.regex):
-            raise ValueError("Expressão incompleta. Faltam operandos ou há parênteses vazios.")
-            
+            raise ValueError(
+                "Expressão incompleta. Faltam operandos ou há parênteses vazios.")
+
         c = self.regex[self.pos]
-        
-        # Se for parênteses resolve a expressão de dentro primeiro
+
+        # Se for parênteses, resolve a expressão de dentro primeiro
         if c == '(':
             self.pos += 1
+            # Parênteses iniciam um novo sub-bloco isolado, então começam com None
             inicio, fim = self.expressao()
-            
+
             if self.pos >= len(self.regex) or self.regex[self.pos] != ')':
                 raise ValueError("Faltou fechar um parêntese ')'.")
-                
+
             self.pos += 1
+
+            # Se um estado inicial vem da concatenação de fora,
+            # nós ligamos esse estado inicial ao início do bloco dos parênteses via epsilon
+            if estado_inicial is not None:
+                self.add_transicao(estado_inicial, "", inicio)
+                return estado_inicial, fim
+
             return inicio, fim
-            
-        # Tratamento de erro para operadores no lugar errado
+
         if c in ['|', ')', '*', '?', '+']:
             raise ValueError(f"Operador '{c}' usado em local inválido.")
-            
-        # Símbolo normal ou Epsilon 
+
         self.pos += 1
-        inicio = self.novo_estado()
+
+        # SE A CONCATENAÇÃO PASSOU UM ESTADO, REUTILIZA ELE.
+        # Caso contrário, cria um novo estado inicial.
+        inicio = estado_inicial if estado_inicial is not None else self.novo_estado()
         fim = self.novo_estado()
-        
+
         if c == 'ε':
             self.add_transicao(inicio, "", fim)
         else:
             self.alfabeto.add(c)
             self.add_transicao(inicio, c, fim)
-            
+
         return inicio, fim
