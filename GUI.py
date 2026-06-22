@@ -1,7 +1,8 @@
-from tkinter import Tk, Label, Entry, Button, Frame, messagebox, Text, Scrollbar, VERTICAL, RIGHT, Y, BOTH, LEFT
+from tkinter import Tk, Label, Entry, Button, Frame, messagebox, Text, Scrollbar, VERTICAL, RIGHT, Y, BOTH, LEFT, filedialog
 from PIL import Image, ImageTk
 from Conversor import ConversorThompson
 import os
+import shutil  # Importado para copiar o arquivo gerado com facilidade
 
 
 class ConverterGUI:
@@ -21,6 +22,7 @@ class ConverterGUI:
 
         # Variável para armazenar a referência da imagem
         self.photo_image = None
+        self.caminho_atual_png = "afnd.png"  # Mantém o rastro do arquivo gerado
 
         master.configure(bg=self.cor_fundo)
 
@@ -192,9 +194,12 @@ class ConverterGUI:
             fg="#999"
         )
         self.imagem_label.pack(fill=BOTH, expand=True)
+
+        # ========== RODAPÉ (INSTRUÇÕES E BOTÃO SALVAR) ==========
         instr_frame = Frame(master, bg="#ecf0f1")
         instr_frame.pack(padx=20, pady=5, fill="x")
 
+        # Texto descritivo alinhado à esquerda
         Label(
             instr_frame,
             text="ℹ️ Operadores: | (união), * (estrela), + (mais de 1), ? (opcional), ( ) (agrupamento), ε (epsilon)",
@@ -202,7 +207,25 @@ class ConverterGUI:
             bg="#ecf0f1",
             fg="#555",
             justify="left"
-        ).pack(anchor="w", padx=10, pady=8)
+        ).pack(side=LEFT, padx=10, pady=8)
+
+        # NOVO: Botão de Salvar Imagem alinhado no canto inferior direito
+        self.btn_salvar = Button(
+            instr_frame,
+            text="💾 Salvar Imagem",
+            command=self.on_save_image,
+            font=("Arial", 9, "bold"),
+            bg=self.cor_sucesso,
+            fg="white",
+            padx=15,
+            pady=4,
+            border=0,
+            cursor="hand2",
+            activebackground="#219150",
+            activeforeground="white",
+            state="disabled"  # Começa desativado até que uma imagem exista
+        )
+        self.btn_salvar.pack(side=RIGHT, padx=10, pady=5)
 
     def on_generate(self):
         regex = self.entry.get().strip()
@@ -222,11 +245,13 @@ class ConverterGUI:
             conversor = ConversorThompson(regex)
             afnd = conversor.converter()
 
-            output_path = "afnd.png"
+            output_path = self.caminho_atual_png
             afnd.show_diagram(path=output_path)
 
             if os.path.exists(output_path):
                 self.exibir_imagem(output_path)
+                # Ativa o botão ao gerar com sucesso
+                self.btn_salvar.config(state="normal")
 
             self.add_log(f"✅ Sucesso! AFND gerado para: {regex}", "sucesso")
             messagebox.showinfo(
@@ -263,6 +288,32 @@ class ConverterGUI:
             self.add_log(
                 f"⚠️ Aviso: Não foi possível exibir a imagem: {str(e)}", "aviso")
 
+    def on_save_image(self):
+        """Abre uma caixa de diálogo para salvar a imagem gerada em um local escolhido."""
+        if not os.path.exists(self.caminho_atual_png):
+            messagebox.showerror(
+                "❌ Erro", "Nenhuma imagem encontrada para salvar.")
+            return
+
+        # Abre o explorador de arquivos para escolher o destino
+        caminho_destino = filedialog.asksaveasfilename(
+            defaultextension=".png",
+            filetypes=[("Imagens PNG", "*.png"), ("Todos os arquivos", "*.*")],
+            title="Salvar Imagem do AFND como..."
+        )
+
+        if caminho_destino:
+            try:
+                # Copia o arquivo temporário gerado para o local escolhido pelo usuário
+                shutil.copy(self.caminho_atual_png, caminho_destino)
+                self.add_log(
+                    f"💾 Imagem salva com sucesso em: {caminho_destino}", "sucesso")
+                messagebox.showinfo("💾 Salvo", "Imagem salva com sucesso!")
+            except Exception as e:
+                self.add_log(f"❌ Erro ao salvar imagem: {str(e)}", "erro")
+                messagebox.showerror(
+                    "⚠️ Erro", f"Não foi possível salvar a imagem:\n{str(e)}")
+
     def on_clear(self):
         self.entry.delete(0, "end")
         self.log_text.config(state="normal")
@@ -270,6 +321,7 @@ class ConverterGUI:
         self.log_text.config(state="normal")
         self.imagem_label.config(image="", text="Nenhum AFND gerado ainda")
         self.photo_image = None
+        self.btn_salvar.config(state="disabled")  # Desativa o botão de salvar
         self.add_log("🧹 Campo limpo!", "info")
         self.entry.focus()
 
